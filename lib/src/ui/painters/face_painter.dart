@@ -1,16 +1,13 @@
-import 'dart:ui'; // PathMetric için gerekli
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-/// Defines the available visual styles for the face tracking frame.
 enum FaceFrameStyle { cornerBracket, roundedBox, dottedLine }
 
 class FacePainter extends CustomPainter {
   final List<Face> faces;
   final Size absoluteImageSize;
   final InputImageRotation rotation;
-
-  // Customization properties
   final Color activeColor;
   final FaceFrameStyle style;
 
@@ -24,36 +21,23 @@ class FacePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (faces.isEmpty) return;
+
     final Paint paint =
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3.0
-          ..color =
-              activeColor // Kullanıcının seçtiği renk
+          ..color = activeColor
           ..strokeCap = StrokeCap.round;
 
     for (final Face face in faces) {
-      final rect = face.boundingBox;
+      final Rect drawingRect = _scaleRect(
+        rect: face.boundingBox,
+        imageSize: absoluteImageSize,
+        widgetSize: size,
+        rotation: rotation,
+      );
 
-      // Scale and mirror logic (Standard setup)
-      final double scaleX = size.width / absoluteImageSize.width;
-      final double scaleY = size.height / absoluteImageSize.height;
-
-      double left = size.width - (rect.right * scaleX);
-      double top = rect.top * scaleY;
-      double right = size.width - (rect.left * scaleX);
-      double bottom = rect.bottom * scaleY;
-
-      // Ensure valid dimensions
-      if (left > right) {
-        final temp = left;
-        left = right;
-        right = temp;
-      }
-
-      final Rect drawingRect = Rect.fromLTRB(left, top, right, bottom);
-
-      // --- STYLE SWITCHER ---
       switch (style) {
         case FaceFrameStyle.cornerBracket:
           _drawCornerBrackets(canvas, drawingRect, paint);
@@ -68,9 +52,61 @@ class FacePainter extends CustomPainter {
     }
   }
 
-  /// Draws the Sci-Fi style corner brackets.
+  /// Helper function to map face coordinates to screen coordinates.
+  /// It handles scaling, centering, and mirroring (for front camera).
+  Rect _scaleRect({
+    required Rect rect,
+    required Size imageSize,
+    required Size widgetSize,
+    required InputImageRotation rotation,
+  }) {
+    // Since we provide 'rotation' to ML Kit when creating InputImage,
+    // it returns face coordinates already "UPRIGHT" (Corrected).
+    // Therefore, we DO NOT need to swap X and Y axes manually.
+    // We only need to match the dimensions and apply scaling.
+
+    // 1. CALCULATE ROTATED DIMENSIONS
+    // If the sensor is at 90 or 270 degrees, the "Effective Image"
+    // processed by ML Kit has swapped Width and Height.
+    final bool isRotated =
+        rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
+
+    final double imageWidth = isRotated ? imageSize.height : imageSize.width;
+    final double imageHeight = isRotated ? imageSize.width : imageSize.height;
+
+    // 2. SCALE (BoxFit.cover logic)
+    // We scale the image to cover the screen (zoom/crop effect).
+    final double scaleX = widgetSize.width / imageWidth;
+    final double scaleY = widgetSize.height / imageHeight;
+    final double scale = scaleX > scaleY ? scaleX : scaleY;
+
+    // 3. CENTER (OFFSET)
+    // Calculate how much of the image is cropped out to center it.
+    final double offsetX = (imageWidth * scale - widgetSize.width) / 2;
+    final double offsetY = (imageHeight * scale - widgetSize.height) / 2;
+
+    // 4. CALCULATE COORDINATES
+    // Note: No axis swapping (X <-> Y) is needed here.
+    // We only perform MIRRORING for the X-axis (Front Camera assumption).
+
+    // Mirroring X axis formula:
+    // Normal: left = rect.left * scale - offsetX;
+    // Mirrored: left = (imageWidth - rect.right) * scale - offsetX;
+
+    double left = (imageWidth - rect.right) * scale - offsetX;
+    double top = rect.top * scale - offsetY;
+    double right = (imageWidth - rect.left) * scale - offsetX;
+    double bottom = rect.bottom * scale - offsetY;
+
+    // TODO: If rear camera is supported in the future, mirroring should be disabled here.
+    // Currently assuming front camera usage.
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
   void _drawCornerBrackets(Canvas canvas, Rect rect, Paint paint) {
-    final double cornerLength = rect.width * 0.15; // Responsive length
+    final double cornerLength = rect.width * 0.15;
     final Path path = Path();
 
     // Top-Left
@@ -96,9 +132,7 @@ class FacePainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  /// Draws a modern rounded rectangle.
   void _drawRoundedBox(Canvas canvas, Rect rect, Paint paint) {
-    // Radius is 10% of the width for a proportional look
     final RRect roundedRect = RRect.fromRectAndRadius(
       rect,
       Radius.circular(rect.width * 0.1),
@@ -106,13 +140,9 @@ class FacePainter extends CustomPainter {
     canvas.drawRRect(roundedRect, paint);
   }
 
-  /// Draws a dashed/dotted rectangle manually.
   void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
-    // Create the full path of the rounded rectangle
     final Path path =
         Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(8)));
-
-    // Use PathMetrics to iterate over the path and draw dashes
     final Path dashPath = Path();
     final double dashWidth = 10.0;
     final double dashSpace = 5.0;
@@ -134,7 +164,7 @@ class FacePainter extends CustomPainter {
   bool shouldRepaint(FacePainter oldDelegate) {
     return oldDelegate.faces != faces ||
         oldDelegate.absoluteImageSize != absoluteImageSize ||
-        oldDelegate.activeColor != activeColor || // Renk değişirse tekrar çiz
-        oldDelegate.style != style; // Stil değişirse tekrar çiz
+        oldDelegate.activeColor != activeColor ||
+        oldDelegate.style != style;
   }
 }
