@@ -25,9 +25,15 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   final CameraManager _cameraManager = CameraManager();
   final FaceDetectorService _faceDetectorService = FaceDetectorService();
 
+  // Anti-Flicker (Debounce) variables
+  int _noFaceFrameCount = 0;
+  static const int _maxEmptyFramesTolerance =
+      3; // Keep drawing for 3 frames if face is lost
+
   List<Face> _faces = [];
   Size _imageSize = Size.zero;
-  // Başlangıçta güvenli bir varsayılan değer
+
+  // Start with a safe default value
   InputImageRotation _rotation = InputImageRotation.rotation270deg;
 
   bool _isInitialized = false;
@@ -50,10 +56,13 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   }
 
   void _processCameraImage(CameraImage image) async {
+    // Safety check
+    if (_cameraManager.controller == null) return;
+
     final description = _cameraManager.controller!.description;
     final sensorOrientation = description.sensorOrientation;
 
-    final faces = await _faceDetectorService.detectFacesFromImage(
+    final detectedFaces = await _faceDetectorService.detectFacesFromImage(
       image,
       description,
       sensorOrientation,
@@ -62,9 +71,24 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     if (!mounted) return;
 
     setState(() {
-      _faces = faces;
+      // --- ANTI-FLICKER LOGIC ---
+      if (detectedFaces.isNotEmpty) {
+        // Face found: Update immediately and reset counter
+        _faces = detectedFaces;
+        _noFaceFrameCount = 0;
+      } else {
+        // No face found: Don't clear immediately!
+        _noFaceFrameCount++;
+
+        // Only clear if the tolerance limit is exceeded (e.g., 3 frames)
+        if (_noFaceFrameCount > _maxEmptyFramesTolerance) {
+          _faces = [];
+        }
+        // Otherwise, the old _faces list remains on screen (Ghost effect)
+      }
+      // --------------------------
+
       _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      // Düzeltme: Sabit 270 yerine sensörün gerçek açısını kullanıyoruz.
       _rotation =
           InputImageRotationValue.fromRawValue(sensorOrientation) ??
           InputImageRotation.rotation270deg;
@@ -87,18 +111,17 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
       );
     }
 
-    // --- DÜZELTME BAŞLIYOR: ASPECT RATIO FIX ---
-    // Ekranın ve kameranın boyutlarını alıyoruz.
+    // --- ASPECT RATIO FIX ---
+    // Get screen dimensions
     final size = MediaQuery.of(context).size;
 
-    // Kamera dikey modda olduğu için (Portrait), aspect ratio'yu ters çevirmemiz gerekebilir
-    // Ancak controller.value.aspectRatio genellikle genişlik/yükseklik verir.
-    // Dikey tutuşta ekran dar ve uzundur (örn: 0.5), kamera genelde 4:3 veya 16:9'dur.
+    // Calculate scale to ensure the camera preview covers the entire screen
+    // without distortion.
     var scale = size.aspectRatio * _cameraManager.controller!.value.aspectRatio;
 
-    // Eğer scale 1'den küçükse, görüntüyü yanlardan kırpmak yerine zoom yaparak doldurmalıyız.
+    // If scale is less than 1, zoom in to fill the screen (BoxFit.cover logic)
     if (scale < 1) scale = 1 / scale;
-    // --- DÜZELTME BİTİYOR ---
+    // ------------------------
 
     return Stack(
       fit: StackFit.expand,
