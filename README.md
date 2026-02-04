@@ -1,39 +1,33 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Live Face Tracker 📸
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+A high-performance Flutter package that detects faces using Google ML Kit on a live camera stream and tracks them with a dynamic UI frame.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## 🌟 Motivation
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+The seeds of this library were sown during my last project. I experienced firsthand how challenging, tedious, yet fascinating it is to build a live face tracking system from scratch without a dedicated external library.
 
-## Features
+Managing the camera stream, integrating image processing algorithms, and synchronizing coordinate systems (image space vs. screen space) required significant engineering effort.
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+Driven by that experience, I started developing `live_face_tracker` to make this technology accessible and to spare others from facing the same hurdles. My goal is not just to detect faces, but to provide a performance-first structure to developers.
 
-## Getting started
+## 🗺️ Roadmap
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+This library follows a "learning-by-doing" development principle. The current plan is:
 
-## Usage
+- [ ] **Project Setup:** Establishing the basic package structure and CI/CD foundations.
+- [ ] **Google ML Kit Integration:** Integrating the `google_mlkit_face_detection` package.
+- [ ] **Camera Management:** Handling live image streams using the `camera` package.
+- [ ] **Face Detection:** Processing incoming frames to extract face coordinates.
+- [ ] **Coordinate Transformation (Painter):** Scaling raw face data to fit screen dimensions.
+- [ ] **Tracking Mechanism (UI):** A UI component that aesthetically frames and tracks the face in sync with movement.
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+## 🛠️ Installation
 
-```dart
-const like = 'sample';
-```
+*Development is ongoing. Instructions will be added upon the first stable release.*
 
-## Additional information
+## 🤝 Contributing
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+This project is open source and welcomes contributions. Please open an issue to discuss changes before submitting a Pull Request.
+
+---
+*Developed with 💙 by Batuhan Yaraş.*
