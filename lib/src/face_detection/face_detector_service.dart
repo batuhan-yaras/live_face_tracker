@@ -1,58 +1,131 @@
+import 'dart:io'; // For platform checks
+import 'dart:ui';
+
 import 'package:camera/camera.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:live_face_tracker/src/utils/input_image_converter.dart';
 
-/// A service class responsible for detecting faces in a given camera image using Google ML Kit.
 class FaceDetectorService {
-  late final FaceDetector _faceDetector;
-
-  /// Initializes the FaceDetector with specific options tailored for
-  /// real-time video processing.
-  FaceDetectorService() {
-    final options = FaceDetectorOptions(
-      // 'fast' mode is crucial for real-time video processing to maintain fps.
-      performanceMode: FaceDetectorMode.fast,
-
-      // We need contours/landmarks? Not for just a bounding box.
-      // Keep it simple for performance.
+  final FaceDetector _faceDetector = FaceDetector(
+    options: FaceDetectorOptions(
       enableContours: false,
+      enableClassification: false,
       enableLandmarks: false,
+      performanceMode: FaceDetectorMode.fast,
+      minFaceSize: 0.15, // Detect smaller faces too
+    ),
+  );
 
-      // Identifying faces (ID tracking) helps in keeping the tracking stable across frames.
-      enableTracking: true,
-    );
+  bool _isBusy = false;
+  int _frameCounter = 0; // Counter to slow down logs
 
-    _faceDetector = FaceDetector(options: options);
-  }
-
-  /// Processes a single [CameraImage] and returns a list of detected [Face]s.
-  ///
-  /// Requires [cameraDescription] and [sensorOrientation] to correctly orient the image for the detector.
   Future<List<Face>> detectFacesFromImage(
     CameraImage image,
-    CameraDescription cameraDescription,
+    CameraDescription description,
     int sensorOrientation,
   ) async {
-    // 1. Convert CameraImage to InputImage
-    final InputImage? inputImage = InputImageConverter.processCameraImage(
-      image,
-      cameraDescription,
-      sensorOrientation,
-    );
+    if (_isBusy) return [];
+    _isBusy = true;
 
-    if (inputImage == null) return [];
-
-    // 2. Pass the converted image to ML Kit
     try {
-      return await _faceDetector.processImage(inputImage);
+      final InputImage? inputImage = _inputImageFromCameraImage(
+        image,
+        description,
+        sensorOrientation,
+      );
+
+      if (inputImage == null) return [];
+
+      final faces = await _faceDetector.processImage(inputImage);
+
+      // --- SMART LOGGING ---
+      // Provide a status report every 60 frames (approx. 1-2 times per second)
+      // ALWAYS log if a face is found.
+      if (faces.isNotEmpty) {
+        debugPrint(
+          "✅ FACE FOUND: ${faces.length} detected! [Frame: $_frameCounter]",
+        );
+        debugPrint("   -> Coordinates: ${faces.first.boundingBox}");
+      } else if (_frameCounter % 60 == 0) {
+        debugPrint(
+          "... searching ... (Processed Image: ${image.width}x${image.height})",
+        );
+      }
+
+      _frameCounter++;
+      // ----------------------
+
+      return faces;
     } catch (e) {
-      debugPrint('Face Detection Error: $e');
+      debugPrint("Error detecting faces: $e");
       return [];
+    } finally {
+      _isBusy = false;
     }
   }
 
-  /// Releases resources used by the face detector.
+  InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraDescription camera,
+    int sensorOrientation,
+  ) {
+    // 1. ROTATION CALCULATION
+    final rotations = {
+      DeviceOrientation.portraitUp: 0,
+      DeviceOrientation.landscapeLeft: 90,
+      DeviceOrientation.portraitDown: 180,
+      DeviceOrientation.landscapeRight: 270,
+    };
+
+    // Default to portrait for now
+    const deviceOrientation = DeviceOrientation.portraitUp;
+
+    int rotationCompensation = 0;
+    if (camera.lensDirection == CameraLensDirection.front) {
+      rotationCompensation =
+          (sensorOrientation + rotations[deviceOrientation]!) % 360;
+    } else {
+      rotationCompensation =
+          (sensorOrientation - rotations[deviceOrientation]! + 360) % 360;
+    }
+
+    // 2. BYTE CONVERSION AND FORMAT
+    // The distinction between Android and iOS is critical.
+
+    InputImageFormat inputImageFormat = InputImageFormat.nv21; // Default
+
+    // If Android and format is YUV420, force NV21
+    if (Platform.isAndroid) {
+      // On Android, CameraImage usually comes as YUV_420_888 (35).
+      // Since we are manually merging planes, we must tell ML Kit this is NV21.
+      inputImageFormat = InputImageFormat.nv21;
+    } else {
+      // iOS usually sends bgra8888
+      final rawValue = image.format.raw;
+      inputImageFormat =
+          InputImageFormatValue.fromRawValue(rawValue) ?? InputImageFormat.nv21;
+    }
+
+    // Flatten plane data into a single byte array
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
+
+    final InputImageMetadata metadata = InputImageMetadata(
+      size: Size(image.width.toDouble(), image.height.toDouble()),
+      rotation:
+          InputImageRotationValue.fromRawValue(rotationCompensation) ??
+          InputImageRotation.rotation0deg,
+      format: inputImageFormat,
+      bytesPerRow: image.planes[0].bytesPerRow,
+    );
+
+    return InputImage.fromBytes(bytes: bytes, metadata: metadata);
+  }
+
   void dispose() {
     _faceDetector.close();
   }
