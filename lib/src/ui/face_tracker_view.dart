@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:live_face_tracker/src/ui/face_tracker_controller.dart';
 
 import '../camera/camera_manager.dart';
 import '../face_detection/face_detector_service.dart';
@@ -9,11 +10,13 @@ import 'painters/face_painter.dart';
 class FaceTrackerView extends StatefulWidget {
   final Color activeColor;
   final FaceFrameStyle frameStyle;
+  final FaceTrackerController? controller;
 
   const FaceTrackerView({
     super.key,
     this.activeColor = Colors.cyanAccent,
     this.frameStyle = FaceFrameStyle.cornerBracket,
+    this.controller,
   });
 
   @override
@@ -38,6 +41,10 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   void initState() {
     super.initState();
     _initialize();
+
+    if (widget.controller != null) {
+      widget.controller!.attach(_cameraManager.takePicture);
+    }
   }
 
   Future<void> _initialize() async {
@@ -88,6 +95,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     _cameraManager.stopStream();
     _cameraManager.dispose();
     _faceDetectorService.dispose();
+    widget.controller?.dispose();
     super.dispose();
   }
 
