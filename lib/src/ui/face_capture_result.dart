@@ -1,46 +1,28 @@
 import 'dart:ui';
 import 'package:camera/camera.dart';
 
-/// A wrapper class that contains the captured image and the face metadata
-/// at the moment of capture.
+/// A result class containing the captured image and the detected face's location.
+///
+/// This class serves as the single source of truth for the capture result.
+/// The [faceRect] is already mapped to the [image]'s resolution and coordinate system,
+/// meaning no further calculation or mapping is required by the consumer.
 class FaceCaptureResult {
-  /// The raw image file captured by the camera.
+  /// The captured image file.
   final XFile image;
 
-  /// The face bounding box coordinates relative to the **Camera Preview**.
-  /// If no face was detected, this will be null.
-  final Rect? rawFaceRect;
-
-  /// The size of the camera preview when the photo was taken.
-  /// This is essential for scaling the Rect to the full image resolution.
-  final Size previewSize;
-
-  FaceCaptureResult({
-    required this.image,
-    required this.rawFaceRect,
-    required this.previewSize,
-  });
-
-  /// Helper method to convert the preview-based Face Rect to the
-  /// actual resolution of the captured image.
+  /// The bounding box of the detected face, mapped to the [image]'s actual resolution.
   ///
-  /// [actualImageSize] is the size of the full resolution photo (e.g. 4000x3000).
-  Rect? getMappedFaceRect({required Size actualImageSize}) {
-    if (rawFaceRect == null) return null;
+  /// This [Rect] is in the coordinate space of the [image].
+  /// If no face was detected at the moment of capture, this will be null.
+  ///
+  /// Logic applied:
+  /// - Scaled from Preview Resolution -> Image Resolution.
+  /// - Mirrored horizontally if the capture was from a front-facing camera.
+  final Rect? faceRect;
 
-    final double scaleX = actualImageSize.width / previewSize.width;
-    final double scaleY = actualImageSize.height / previewSize.height;
-
-    return Rect.fromLTRB(
-      rawFaceRect!.left * scaleX,
-      rawFaceRect!.top * scaleY,
-      rawFaceRect!.right * scaleX,
-      rawFaceRect!.bottom * scaleY,
-    );
-  }
+  const FaceCaptureResult({required this.image, this.faceRect});
 
   @override
-  String toString() {
-    return 'FaceCaptureResult(path: ${image.path}, faceDetected: ${rawFaceRect != null})';
-  }
+  String toString() =>
+      'FaceCaptureResult(image: ${image.path}, faceRect: $faceRect)';
 }
