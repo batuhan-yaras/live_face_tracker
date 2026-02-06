@@ -40,6 +40,22 @@ class CameraManager {
     await _controller!.initialize();
   }
 
+  /// Captures a photo from the current camera stream.
+  Future<XFile?> takePicture() async {
+    if (controller == null || !controller!.value.isInitialized) {
+      return null;
+    }
+    if (controller!.value.isTakingPicture) {
+      return null; // Zaten çekim yapılıyor
+    }
+
+    try {
+      return await controller!.takePicture();
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Starts the live image stream from the camera.
   ///
   /// [onImage] is a callback function that receives each [CameraImage] frame.
