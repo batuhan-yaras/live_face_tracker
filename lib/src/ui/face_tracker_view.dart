@@ -18,9 +18,11 @@ class FaceTrackerView extends StatefulWidget {
   final bool showCaptureButton;
 
   /// Callback that returns the list of detected faces mapped to screen coordinates.
+  /// Useful for drawing custom overlays (like masks or filters) on top of the face.
   final Function(List<Rect> faces)? onFacesDetected;
 
   /// Callback fired when the built-in shutter button is pressed.
+  /// Returns a [FaceCaptureResult] containing the high-res image and mapped face coordinates.
   final Function(FaceCaptureResult result)? onPhotoCaptured;
 
   const FaceTrackerView({
@@ -50,12 +52,14 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   // Camera and Screen properties
   Size _imageSize = Size.zero;
   InputImageRotation _rotation = InputImageRotation.rotation270deg;
-  bool _isInitialized = false; // <--- KRİTİK DEĞİŞKEN
+
+  // CRITICAL: Controls the UI state during camera initialization and switching.
+  bool _isInitialized = false;
 
   // Current widget size
   Size _widgetSize = Size.zero;
 
-  // Internal controller fallback
+  // Internal controller fallback if no external controller is provided
   FaceTrackerController? _internalController;
 
   FaceTrackerController get _effectiveController =>
@@ -66,10 +70,10 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     super.initState();
     _initialize();
 
-    // Controller'ı bağla
+    // Attach the controller to the internal managers
     _effectiveController.attach(
       takePicture: _cameraManager.takePicture,
-      switchCamera: _onCameraSwitchRequest, // Handler burada bağlanıyor
+      switchCamera: _onCameraSwitchRequest, // Bind the switch camera handler
     );
   }
 
@@ -83,29 +87,30 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     }
   }
 
-  // --- KRİTİK DÜZELTME BURADA ---
+  // --- CAMERA SWITCHING LOGIC ---
   Future<void> _onCameraSwitchRequest() async {
-    // 1. UI'ı Yükleniyor moduna al ve TEMİZLİK YAP
+    // 1. Set UI to Loading State and Perform Cleanup
     if (mounted) {
       setState(() {
-        _isInitialized = false; // Loading spinner'ı aç
-        _targetFaceRect = null; // Dahili çerçeveyi (yeşil kutu) sil
-        _imageSize = Size.zero; // Eski resim boyutunu unut
+        _isInitialized = false; // Trigger loading spinner
+        _targetFaceRect = null; // Clear the internal tracking frame
+        _imageSize = Size.zero; // Reset image dimensions
       });
 
-      // ⚠️ KRİTİK EKLEME: CUSTOM UI TEMİZLİĞİ
-      // Kamera akışı durduğu için dedektör çalışmaz.
-      // Bu yüzden "yüz yok" bilgisini manuel olarak biz göndermeliyiz.
-      // Böylece ekrandaki Custom UI (Emoji, Maske vb.) donup kalmaz.
+      // ⚠️ CRITICAL: MANUALLY CLEAR CUSTOM UI
+      // Since the camera stream stops during the switch, the face detector
+      // stops producing events. We must manually send an empty list to
+      // prevent external listeners (like custom masks) from freezing
+      // on the last detected face position.
       if (widget.onFacesDetected != null) {
         widget.onFacesDetected!([]);
       }
     }
 
-    // 2. Kamerayı değiştir
+    // 2. Switch the camera hardware
     final newCamera = await _cameraManager.switchCamera();
 
-    // 3. Yeni kamera açıldıysa akışı tekrar başlat
+    // 3. Restart the stream if the new camera is ready
     if (newCamera != null && mounted) {
       await _cameraManager.startStream(_processCameraImage);
       setState(() {
@@ -130,6 +135,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     if (!mounted) return;
 
     setState(() {
+      // Anti-flicker logic for the internal frame
       if (detectedFaces.isNotEmpty) {
         _targetFaceRect = detectedFaces.first.boundingBox;
         _noFaceFrameCount = 0;
@@ -145,6 +151,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
           InputImageRotationValue.fromRawValue(sensorOrientation) ??
           InputImageRotation.rotation270deg;
 
+      // Update the controller with the latest face data
       if (_imageSize != Size.zero) {
         _effectiveController.updateFaceData(
           _targetFaceRect,
@@ -153,6 +160,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
         );
       }
 
+      // Map coordinates for external consumers (Custom UI)
       if (widget.onFacesDetected != null &&
           _widgetSize != Size.zero &&
           _imageSize != Size.zero) {
@@ -171,6 +179,8 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
     });
   }
 
+  /// Maps the raw face coordinates from the camera image to the screen coordinates.
+  /// Handles scaling, centering, and rotation automatically.
   Rect _mapFaceToScreenRect(
     Rect rawFace,
     Size imageSize,
@@ -217,8 +227,9 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
 
   @override
   Widget build(BuildContext context) {
-    // _isInitialized FALSE ise Loading göster.
-    // Bu, kamera değişirken hata almanı engeller.
+    // If NOT initialized, show a black loading screen.
+    // This prevents the 'CameraPreview' from trying to render a disposed
+    // or uninitialized controller during camera switching.
     if (!_isInitialized ||
         _cameraManager.controller == null ||
         !_cameraManager.controller!.value.isInitialized) {
@@ -242,11 +253,13 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
         return Stack(
           fit: StackFit.expand,
           children: [
+            // Layer 1: Camera Preview
             Transform.scale(
               scale: scale,
               child: Center(child: CameraPreview(_cameraManager.controller!)),
             ),
 
+            // Layer 2: Internal Tracking Frame (Optional)
             if (widget.showFrame && _imageSize != Size.zero)
               TweenAnimationBuilder<Rect?>(
                 tween: RectTween(
@@ -269,6 +282,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                 },
               ),
 
+            // Layer 3: Built-in Shutter Button (Optional)
             if (widget.showCaptureButton)
               Positioned(
                 bottom: 30,
@@ -281,7 +295,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                       width: 70,
                       height: 70,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 4),
                       ),

@@ -5,15 +5,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
+/// Manages the camera lifecycle, including initialization, streaming, and switching.
 class CameraManager {
   CameraController? _controller;
   CameraDescription? _currentCamera;
-  List<CameraDescription> _cameras = []; // Tüm kameraları tutacak liste
+  List<CameraDescription> _cameras = []; // List to hold all available cameras
 
   CameraController? get controller => _controller;
 
-  /// Initializes the camera.
-  /// If [initialCameraDirection] is provided, it tries to select that camera.
+  /// Initializes the camera session.
+  ///
+  /// If [initialCameraDirection] is provided, it attempts to select that specific camera.
+  /// Defaults to [CameraLensDirection.front].
   Future<void> initialize({
     CameraLensDirection initialCameraDirection = CameraLensDirection.front,
   }) async {
@@ -24,7 +27,7 @@ class CameraManager {
       return;
     }
 
-    // İstenen yöndeki kamerayı bul, yoksa ilkini seç
+    // Attempt to find the camera with the desired direction; otherwise, fallback to the first available one.
     _currentCamera = _cameras.firstWhere(
       (cam) => cam.lensDirection == initialCameraDirection,
       orElse: () => _cameras.first,
@@ -33,7 +36,7 @@ class CameraManager {
     await _initController(_currentCamera!);
   }
 
-  /// Internal helper to initialize the specific camera controller
+  /// Internal helper to configure and initialize the specific camera controller.
   Future<void> _initController(CameraDescription camera) async {
     final controller = CameraController(
       camera,
@@ -53,25 +56,27 @@ class CameraManager {
     }
   }
 
-  /// Starts the image stream for processing
+  /// Starts the image stream for real-time processing.
   Future<void> startStream(Function(CameraImage) onImage) async {
     if (_controller == null || !_controller!.value.isInitialized) return;
     await _controller!.startImageStream(onImage);
   }
 
-  /// Stops the stream
+  /// Stops the current image stream.
   Future<void> stopStream() async {
     if (_controller != null && _controller!.value.isStreamingImages) {
       await _controller!.stopImageStream();
     }
   }
 
-  /// Switches the camera to the opposite direction (Front <-> Back)
-  /// Returns the new CameraDescription to update the UI/Controller
+  /// Switches the camera to the opposite direction (Front <-> Back).
+  ///
+  /// Returns the new [CameraDescription] to allow the UI or Controller to update
+  /// necessary properties (like rotation or mirroring).
   Future<CameraDescription?> switchCamera() async {
     if (_cameras.isEmpty || _currentCamera == null) return null;
 
-    // 1. Yönü değiştir
+    // 1. Determine the target direction
     final newDirection =
         _currentCamera!.lensDirection == CameraLensDirection.front
             ? CameraLensDirection.back
@@ -82,16 +87,15 @@ class CameraManager {
       orElse: () => _cameras.first,
     );
 
-    // 2. Eskiyi durdur
+    // 2. Stop and dispose of the current controller
     await stopStream();
     await _controller?.dispose();
     _controller = null;
 
-    // 3. Yeniyi başlat (Mevcut _initController metodunu kullanarak)
+    // 3. Initialize the new camera
     _currentCamera = newCamera;
 
-    // _initController private olduğu için burada tekrar kodunu yazabilir
-    // veya _initController'ı çağırabilirsin. En temiz yol:
+    // Re-initialize a fresh controller for the new camera.
     final controller = CameraController(
       newCamera,
       ResolutionPreset.high,
@@ -112,14 +116,15 @@ class CameraManager {
     return _currentCamera;
   }
 
-  // ... (takePicture ve dispose metodların aynı kalabilir)
+  /// Captures a high-resolution image using the current camera.
   Future<XFile?> takePicture() async {
-    // ... (Mevcut kodun aynısı)
     if (_controller == null || !_controller!.value.isInitialized) return null;
     if (_controller!.value.isTakingPicture) return null;
+
     return await _controller!.takePicture();
   }
 
+  /// Disposes of the camera controller to release resources.
   void dispose() {
     _controller?.dispose();
   }

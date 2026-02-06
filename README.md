@@ -147,4 +147,3 @@ The object returned after a capture.
 ---
 
 Developed with 💙 by **Batuhan Yaraş**.
-
