@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui; // Needed for Rect/Size in compute
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart'; // For compute
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
@@ -13,16 +16,13 @@ class FaceTrackerView extends StatefulWidget {
   final Color activeColor;
   final FaceFrameStyle frameStyle;
   final FaceTrackerController? controller;
-
   final bool showFrame;
   final bool showCaptureButton;
 
   /// Callback that returns the list of detected faces mapped to screen coordinates.
-  /// Useful for drawing custom overlays (like masks or filters) on top of the face.
   final Function(List<Rect> faces)? onFacesDetected;
 
   /// Callback fired when the built-in shutter button is pressed.
-  /// Returns a [FaceCaptureResult] containing the high-res image and mapped face coordinates.
   final Function(FaceCaptureResult result)? onPhotoCaptured;
 
   const FaceTrackerView({
@@ -44,22 +44,18 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   final CameraManager _cameraManager = CameraManager();
   final FaceDetectorService _faceDetectorService = FaceDetectorService();
 
-  // Internal state for UI rendering
-  int _noFaceFrameCount = 0;
-  static const int _maxEmptyFramesTolerance = 3;
-  Rect? _targetFaceRect;
+  // --- SMART SMOOTHING STATE ---
+  Rect? _smoothFaceRect;
+  // -----------------------------
 
-  // Camera and Screen properties
+  // UI State
+  Rect? _targetFaceRect;
   Size _imageSize = Size.zero;
   InputImageRotation _rotation = InputImageRotation.rotation270deg;
-
-  // CRITICAL: Controls the UI state during camera initialization and switching.
   bool _isInitialized = false;
-
-  // Current widget size
+  bool _isBusy = false;
   Size _widgetSize = Size.zero;
 
-  // Internal controller fallback if no external controller is provided
   FaceTrackerController? _internalController;
 
   FaceTrackerController get _effectiveController =>
@@ -69,144 +65,203 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
   void initState() {
     super.initState();
     _initialize();
-
-    // Attach the controller to the internal managers
     _effectiveController.attach(
       takePicture: _cameraManager.takePicture,
-      switchCamera: _onCameraSwitchRequest, // Bind the switch camera handler
+      switchCamera: _onCameraSwitchRequest,
     );
   }
 
   Future<void> _initialize() async {
     await _cameraManager.initialize();
     await _cameraManager.startStream(_processCameraImage);
-    if (mounted) {
-      setState(() {
-        _isInitialized = true;
-      });
-    }
+    if (mounted) setState(() => _isInitialized = true);
   }
 
-  // --- CAMERA SWITCHING LOGIC ---
+  // --- CAMERA SWITCH LOGIC ---
   Future<void> _onCameraSwitchRequest() async {
-    // 1. Set UI to Loading State and Perform Cleanup
     if (mounted) {
+      // 1. Pause rendering immediately to prevent black screen glitches
       setState(() {
-        _isInitialized = false; // Trigger loading spinner
-        _targetFaceRect = null; // Clear the internal tracking frame
-        _imageSize = Size.zero; // Reset image dimensions
+        _isInitialized = false;
+        _targetFaceRect = null;
+        _smoothFaceRect = null;
+        _imageSize = Size.zero;
       });
 
-      // ⚠️ CRITICAL: MANUALLY CLEAR CUSTOM UI
-      // Since the camera stream stops during the switch, the face detector
-      // stops producing events. We must manually send an empty list to
-      // prevent external listeners (like custom masks) from freezing
-      // on the last detected face position.
+      // 2. Notify external UI to clear immediately
       if (widget.onFacesDetected != null) {
-        widget.onFacesDetected!([]);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onFacesDetected!([]);
+        });
       }
     }
 
-    // 2. Switch the camera hardware
+    // 3. Perform the hardware switch
     final newCamera = await _cameraManager.switchCamera();
 
-    // 3. Restart the stream if the new camera is ready
+    // 4. Resume rendering with new camera
     if (newCamera != null && mounted) {
       await _cameraManager.startStream(_processCameraImage);
-      setState(() {
-        _isInitialized = true;
-      });
+      setState(() => _isInitialized = true);
     }
   }
-  // ------------------------------
 
   void _processCameraImage(CameraImage image) async {
-    if (_cameraManager.controller == null) return;
+    // 🛑 BUSY CHECK: If previous frame is still processing, DROP this one.
+    if (_isBusy) return;
+    _isBusy = true;
 
-    final description = _cameraManager.controller!.description;
-    final sensorOrientation = description.sensorOrientation;
+    try {
+      if (_cameraManager.controller == null) return;
 
-    final detectedFaces = await _faceDetectorService.detectFacesFromImage(
-      image,
-      description,
-      sensorOrientation,
-    );
+      final description = _cameraManager.controller!.description;
+      final sensorOrientation = description.sensorOrientation;
+      final lensDirection = description.lensDirection;
 
-    if (!mounted) return;
+      // 1. Detect Faces (Heavy ML Task)
+      final detectedFaces = await _faceDetectorService.detectFacesFromImage(
+        image,
+        description,
+        sensorOrientation,
+      );
 
-    setState(() {
-      // Anti-flicker logic for the internal frame
-      if (detectedFaces.isNotEmpty) {
-        _targetFaceRect = detectedFaces.first.boundingBox;
-        _noFaceFrameCount = 0;
-      } else {
-        _noFaceFrameCount++;
-        if (_noFaceFrameCount > _maxEmptyFramesTolerance) {
-          _targetFaceRect = null;
-        }
-      }
+      if (!mounted) return;
 
-      _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      _rotation =
+      final newImageSize = Size(
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+      final newRotation =
           InputImageRotationValue.fromRawValue(sensorOrientation) ??
           InputImageRotation.rotation270deg;
 
-      // Update the controller with the latest face data
-      if (_imageSize != Size.zero) {
-        _effectiveController.updateFaceData(
-          _targetFaceRect,
-          _imageSize,
-          _cameraManager.controller!.description,
+      if (detectedFaces.isEmpty) {
+        _smoothFaceRect = null;
+        _targetFaceRect = null;
+
+        setState(() {
+          // DİKKAT: _imageSize = Size.zero YAPMA!
+          // _imageSize'ı koru ki ekrandaki görüntü bozulmasın (Siyah ekran çözümü).
+          if (newImageSize.width > 0) {
+            _imageSize = newImageSize;
+            _rotation = newRotation;
+          }
+
+          // Controller'a boş veri gönder
+          if (_imageSize.width > 0) {
+            _effectiveController.updateFaceData(null, _imageSize, description);
+          }
+        });
+
+        // Dışarıya boş liste gönder (Custom UI temizlensin)
+        if (widget.onFacesDetected != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onFacesDetected!([]);
+          });
+        }
+
+        return; // İşlemi burada kes.
+      }
+      // ============================================================
+      // 🛑 EMPTY STATE HANDLING (CRITICAL FIX)
+      // ============================================================
+      if (detectedFaces.isEmpty) {
+        // Reset Logic: If no face, clear everything.
+        _smoothFaceRect = null;
+        _targetFaceRect = null;
+
+        setState(() {
+          _imageSize = newImageSize;
+          _rotation = newRotation;
+          // Clear controller data
+          if (_imageSize != Size.zero) {
+            _effectiveController.updateFaceData(null, _imageSize, description);
+          }
+        });
+
+        // Notify external UI to clear (prevents sticky custom UI)
+        if (widget.onFacesDetected != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onFacesDetected!([]);
+          });
+        }
+
+        // EXIT EARLY: Do not run compute or math on empty data.
+        // This prevents the "Black Screen" error caused by null calculations.
+        return;
+      }
+      // ============================================================
+
+      // --- IF WE ARE HERE, WE HAVE A FACE ---
+
+      // 2. Offload Coordinate Mapping to Isolate (Compute)
+      // Only run if widget size is known to avoid division by zero
+      Rect? currentRawRect;
+      if (_widgetSize != Size.zero &&
+          _widgetSize.width > 0 &&
+          _widgetSize.height > 0) {
+        final mappingData = _MappingData(
+          boundingBox: detectedFaces.first.boundingBox,
+          imageSize: newImageSize,
+          widgetSize: _widgetSize,
+          rotation: newRotation,
+          lensDirection: lensDirection,
         );
+
+        // Run heavy math in background isolate
+        currentRawRect = await compute(_mapFacesInIsolate, mappingData);
       }
 
-      // Map coordinates for external consumers (Custom UI)
-      if (widget.onFacesDetected != null &&
-          _widgetSize != Size.zero &&
-          _imageSize != Size.zero) {
-        final List<Rect> screenRects =
-            detectedFaces.map((face) {
-              return _mapFaceToScreenRect(
-                face.boundingBox,
-                _imageSize,
-                _widgetSize,
-                _rotation,
-              );
-            }).toList();
-
-        widget.onFacesDetected!(screenRects);
+      // 3. Smart Smoothing (Adaptive Low-Pass Filter)
+      if (currentRawRect != null) {
+        if (_smoothFaceRect == null) {
+          _smoothFaceRect = currentRawRect; // Jump to position instantly
+        } else {
+          double distance =
+              (_smoothFaceRect!.center - currentRawRect.center).distance;
+          // Dynamic Sensitivity:
+          // Fast movement (>50px) -> High lerp (0.9) -> Fast follow
+          // Slow movement (<5px)  -> Low lerp (0.1)  -> Smooth/No jitter
+          double sensitivity = 50.0;
+          double lerpFactor = (distance / sensitivity).clamp(0.1, 0.9);
+          _smoothFaceRect = Rect.lerp(
+            _smoothFaceRect,
+            currentRawRect,
+            lerpFactor,
+          );
+        }
       }
-    });
-  }
 
-  /// Maps the raw face coordinates from the camera image to the screen coordinates.
-  /// Handles scaling, centering, and rotation automatically.
-  Rect _mapFaceToScreenRect(
-    Rect rawFace,
-    Size imageSize,
-    Size widgetSize,
-    InputImageRotation rotation,
-  ) {
-    final bool isRotated =
-        rotation == InputImageRotation.rotation90deg ||
-        rotation == InputImageRotation.rotation270deg;
+      // 4. Update UI State (Internal Frame & Controller)
+      setState(() {
+        _targetFaceRect = detectedFaces.first.boundingBox;
+        _imageSize = newImageSize;
+        _rotation = newRotation;
 
-    final double imageWidth = isRotated ? imageSize.height : imageSize.width;
-    final double imageHeight = isRotated ? imageSize.width : imageSize.height;
+        if (_imageSize != Size.zero) {
+          _effectiveController.updateFaceData(
+            _targetFaceRect,
+            _imageSize,
+            description,
+          );
+        }
+      });
 
-    final double scaleX = widgetSize.width / imageWidth;
-    final double scaleY = widgetSize.height / imageHeight;
-    final double scale = scaleX > scaleY ? scaleX : scaleY;
-
-    final double offsetX = (imageWidth * scale - widgetSize.width) / 2;
-    final double offsetY = (imageHeight * scale - widgetSize.height) / 2;
-
-    double left = (imageWidth - rawFace.right) * scale - offsetX;
-    double top = rawFace.top * scale - offsetY;
-    double right = (imageWidth - rawFace.left) * scale - offsetX;
-    double bottom = rawFace.bottom * scale - offsetY;
-
-    return Rect.fromLTRB(left, top, right, bottom);
+      // 5. Send Processed (Smoothed) Data to User
+      if (widget.onFacesDetected != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            widget.onFacesDetected!(
+              _smoothFaceRect != null ? [_smoothFaceRect!] : [],
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error processing frame: $e");
+    } finally {
+      _isBusy = false; // Unlock for next frame
+    }
   }
 
   @override
@@ -227,9 +282,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
 
   @override
   Widget build(BuildContext context) {
-    // If NOT initialized, show a black loading screen.
-    // This prevents the 'CameraPreview' from trying to render a disposed
-    // or uninitialized controller during camera switching.
+    // Show loading if camera is not ready
     if (!_isInitialized ||
         _cameraManager.controller == null ||
         !_cameraManager.controller!.value.isInitialized) {
@@ -259,11 +312,14 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
               child: Center(child: CameraPreview(_cameraManager.controller!)),
             ),
 
-            // Layer 2: Internal Tracking Frame (Optional)
-            if (widget.showFrame && _imageSize != Size.zero)
+            // Layer 2: Built-in Tracking Frame
+            // We verify that _imageSize is valid to prevent drawing errors
+            if (widget.showFrame &&
+                _imageSize.width > 0 &&
+                _targetFaceRect != null)
               TweenAnimationBuilder<Rect?>(
                 tween: RectTween(
-                  begin: _targetFaceRect ?? Rect.zero,
+                  begin: _targetFaceRect, // Null yerine direkt hedefi ver
                   end: _targetFaceRect,
                 ),
                 duration: const Duration(milliseconds: 150),
@@ -276,13 +332,19 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                       rotation: _rotation,
                       activeColor: widget.activeColor,
                       style: widget.frameStyle,
+                      isFrontCamera:
+                          _cameraManager
+                              .controller
+                              ?.description
+                              .lensDirection ==
+                          CameraLensDirection.front,
                     ),
                     size: Size(constraints.maxWidth, constraints.maxHeight),
                   );
                 },
               ),
 
-            // Layer 3: Built-in Shutter Button (Optional)
+            // Layer 3: Capture Button
             if (widget.showCaptureButton)
               Positioned(
                 bottom: 30,
@@ -295,7 +357,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                       width: 70,
                       height: 70,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 4),
                       ),
@@ -315,4 +377,64 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
       },
     );
   }
+}
+
+// --- ISOLATE HELPERS ---
+
+/// Data transfer object for the compute function
+class _MappingData {
+  final Rect boundingBox;
+  final Size imageSize;
+  final Size widgetSize;
+  final InputImageRotation rotation;
+  final CameraLensDirection lensDirection;
+
+  _MappingData({
+    required this.boundingBox,
+    required this.imageSize,
+    required this.widgetSize,
+    required this.rotation,
+    required this.lensDirection,
+  });
+}
+
+/// Standalone function to run in a background Isolate.
+/// Maps camera coordinates to screen coordinates.
+Rect _mapFacesInIsolate(_MappingData data) {
+  final bool isRotated =
+      data.rotation == InputImageRotation.rotation90deg ||
+      data.rotation == InputImageRotation.rotation270deg;
+
+  final double imageWidth =
+      isRotated ? data.imageSize.height : data.imageSize.width;
+  final double imageHeight =
+      isRotated ? data.imageSize.width : data.imageSize.height;
+
+  // Calculate Scale
+  final double scaleX = data.widgetSize.width / imageWidth;
+  final double scaleY = data.widgetSize.height / imageHeight;
+  final double scale = scaleX > scaleY ? scaleX : scaleY;
+
+  // Calculate Offset
+  final double offsetX = (imageWidth * scale - data.widgetSize.width) / 2;
+  final double offsetY = (imageHeight * scale - data.widgetSize.height) / 2;
+
+  final rawFace = data.boundingBox;
+  double left, right;
+
+  // FIX: Back Camera Inversion Logic
+  if (data.lensDirection == CameraLensDirection.front) {
+    // Front Camera: Needs mirroring
+    left = (imageWidth - rawFace.right) * scale - offsetX;
+    right = (imageWidth - rawFace.left) * scale - offsetX;
+  } else {
+    // Back Camera: No mirroring (standard mapping)
+    left = rawFace.left * scale - offsetX;
+    right = rawFace.right * scale - offsetX;
+  }
+
+  double top = rawFace.top * scale - offsetY;
+  double bottom = rawFace.bottom * scale - offsetY;
+
+  return Rect.fromLTRB(left, top, right, bottom);
 }
