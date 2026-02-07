@@ -140,14 +140,11 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
         _targetFaceRect = null;
 
         setState(() {
-          // DİKKAT: _imageSize = Size.zero YAPMA!
-          // _imageSize'ı koru ki ekrandaki görüntü bozulmasın (Siyah ekran çözümü).
           if (newImageSize.width > 0) {
             _imageSize = newImageSize;
             _rotation = newRotation;
           }
 
-          // Controller'a boş veri gönder
           if (_imageSize.width > 0) {
             _effectiveController.updateFaceData(null, _imageSize, description);
           }
@@ -160,7 +157,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
           });
         }
 
-        return; // İşlemi burada kes.
+        return;
       }
       // ============================================================
       // 🛑 EMPTY STATE HANDLING (CRITICAL FIX)

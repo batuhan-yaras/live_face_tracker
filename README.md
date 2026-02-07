@@ -19,15 +19,15 @@ Drawing a smooth tracking frame, handling aspect ratios, synchronizing screen co
 I developed **live_face_tracker** to provide a "plug-and-play" solution. Whether you need a simple face tracking overlay or raw face data to build Snapchat-like filters, this package handles the heavy lifting.
 
 ---
-<!-- 
+
 ## 🎬 Previews
 
-| **Customization** | **Headless / Custom UI** |
+| **Dynamic Styling** | **Headless Mode (Custom UI)** |
 | :---: | :---: |
-| ![Style Demo](LINK_TO_YOUR_STYLE_GIF_HERE) | ![Custom UI Demo](LINK_TO_YOUR_CUSTOM_UI_GIF_HERE) |
-| *Switch styles (Bracket, Box) & Colors* | *Hide the frame & use raw data for custom overlays* |
+| ![Style Demo](live_face_tracker/assets/gifs/face_tracking.gif) | ![Custom UI Demo](live_face_tracker/assets/gifs/face_tracking.gif) |
+| *Seamlessly switch between frame styles and colors.* | *Disable the default frame to build custom AR overlays.* |
 
---- -->
+---
 
 ## ✨ Key Features
 
@@ -87,13 +87,14 @@ _controller.capture();      // Take photo
 
 ### 3. Headless Mode (Custom UI)
 Want to build your own filter or mask? Disable the built-in frame and use the real-time data stream.
+* **⚠️ Performance Note:** The onFacesDetected stream returns raw coordinates directly from the detector (typically 15-30 FPS). To achieve a smooth 60 FPS experience like the built-in frame, you should implement your own interpolation (e.g., using TweenAnimationBuilder) in your custom UI.
 
 ```dart
 FaceTrackerView(
   showFrame: false, // Hide the default bracket
   onFacesDetected: (List<Rect> faces) {
-    // 'faces' contains the exact screen coordinates.
-    // You can use a Stack + CustomPainter to draw masks, hats, etc.
+    // 'faces' contains the RAW screen coordinates.
+    // Tip: Use TweenAnimationBuilder to smooth out the movement!
   },
 )
 ```
@@ -112,7 +113,7 @@ The primary widget. All parameters are optional except `key`.
 | `frameStyle` | `FaceFrameStyle` | `.cornerBracket` | Visual style (`cornerBracket`, `roundedBox`, `dottedLine`). |
 | `showFrame` | `bool` | `true` | If false, hides the tracking overlay (useful for custom UIs). |
 | `showCaptureButton` | `bool` | `true` | If true, shows a shutter button at the bottom. |
-| `onFacesDetected` | `Function(List<Rect>)?` | `null` | Stream of face coordinates mapped to the **screen**. |
+| `onFacesDetected` | `Function(List<Rect>)?` | `null` | Stream of raw face coordinates mapped to the screen. |
 | `onPhotoCaptured` | `Function(FaceCaptureResult)?` | `null` | Callback containing the captured file and face data. |
 
 ---
@@ -133,9 +134,10 @@ The object returned after a capture.
 ---
 
 ## ⚡ Performance Optimizations
-`Curves.easeOutCubic`
-* 🚀 **Interpolation Engine:** We use `Curves.easeOutCubic` to animate the frame updates. This masks the lower frame rate of the ML detector (usually 15-30fps) compared to the UI (60-120fps), creating a buttery smooth experience.
-* 🚀 **Coordinate Mapping:** The package handles the complex math of converting "Camera Sensor Coordinates" -> "Screen Coordinates" (for preview) and "Camera Sensor" -> "Image File Coordinates" (for capture), including handling mirroring for front cameras.
+
+* **🧵 Isolate Computing:** Face coordinate mapping and scaling logic are executed in a background `Isolate`. This prevents frame drops (jank) on the UI thread, ensuring a buttery smooth experience even on older devices.
+* **🌊 Adaptive Smoothing:** We use a dynamic low-pass filter logic. If the face is stationary, the jitter is filtered out. If the face moves quickly, the filter opens up to track instantly without lag.
+* **📏 Smart Mapping:** The package handles the complex math of converting "Camera Sensor Coordinates" -> "Screen Coordinates" (for preview) and "Camera Sensor" -> "Image File Coordinates" (for capture), including handling mirroring for front/back cameras appropriately.
 
 ---
 
