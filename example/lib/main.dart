@@ -22,23 +22,16 @@ class _TestLabPageState extends State<TestLabPage> {
   Color _activeColor = Colors.cyanAccent;
 
   // --- 2. Toggles State ---
-  bool _showFrame = true; // Show the package's built-in frame
-  bool _showCaptureButton = true; // Show the package's built-in button
-  bool _showCustomOverlay = false; // Show OUR custom "Devil" overlay
-  bool _isPanelVisible = true; // Visibility of the bottom control panel
-  bool _isLoading = false; // Global loading state (for switching/capturing)
+  bool _showFrame = true;
+  bool _showCaptureButton = true;
+  bool _showCustomOverlay = false;
+  bool _isPanelVisible = true;
+  bool _isLoading = false;
 
-  // --- 3. Data State (Anti-Flicker Logic) ---
-  // We store the detected faces here to draw our custom UI.
+  // --- 3. Data State ---
+  // The data stream is already smoothed by the package.
   List<Rect> _detectedFaces = [];
 
-  // Counter to handle brief moments where the detector loses the face.
-  int _missedFrames = 0;
-  static const int _frameTolerance =
-      6; // Keep drawing the face for 6 frames even if lost.
-
-  // --- 4. Controller ---
-  // We instantiate the controller to trigger actions programmatically (like Switch Camera).
   final FaceTrackerController _controller = FaceTrackerController();
 
   @override
@@ -48,7 +41,7 @@ class _TestLabPageState extends State<TestLabPage> {
       body: Stack(
         children: [
           // ------------------------------------------------
-          // LAYER 1: The FaceTrackerView (The Package Core)
+          // LAYER 1: The FaceTrackerView
           // ------------------------------------------------
           FaceTrackerView(
             controller: _controller,
@@ -57,49 +50,35 @@ class _TestLabPageState extends State<TestLabPage> {
             showFrame: _showFrame,
             showCaptureButton: _showCaptureButton,
 
-            // API: Real-time Face Coordinates
-            // This callback gives us the mapped coordinates of the face on the screen.
+            // API: Real-time Face Coordinates Stream
             onFacesDetected: (faces) {
               if (_showCustomOverlay) {
-                // Anti-Flicker Logic:
-                // If the face is detected, update immediately.
-                if (faces.isNotEmpty) {
-                  _missedFrames = 0;
+                if (mounted) {
                   setState(() {
                     _detectedFaces = faces;
                   });
-                } else {
-                  // If face is lost, wait a few frames before clearing the UI.
-                  // This prevents the emoji from blinking in and out.
-                  _missedFrames++;
-                  if (_missedFrames > _frameTolerance) {
-                    setState(() {
-                      _detectedFaces = [];
-                    });
-                  }
                 }
               }
             },
 
             // API: Photo Capture Result
-            // This returns the high-res image and the face coordinates mapped to it.
             onPhotoCaptured: (result) async {
-              setState(() => _isLoading = true); // Show loading
-
-              // Simulate a tiny delay for UX or processing
+              setState(() => _isLoading = true);
               await Future.delayed(const Duration(milliseconds: 100));
-
-              setState(() => _isLoading = false); // Hide loading
-              _showResultDialog(result);
+              if (mounted) {
+                setState(() => _isLoading = false);
+                _showResultDialog(result);
+              }
             },
           ),
 
           // ------------------------------------------------
-          // LAYER 2: Custom Developer Overlay (The Devil Emoji 😈)
+          // LAYER 2: Custom Developer Overlay
           // ------------------------------------------------
-          // Demonstrates how to build your own UI on top of the tracker.
           if (_showCustomOverlay)
             IgnorePointer(
+              // Using CustomPaint with Size.infinite ensures it covers the screen
+              // even if no faces are detected initially.
               child: CustomPaint(
                 painter: EmojiFacePainter(faces: _detectedFaces),
                 size: Size.infinite,
@@ -107,7 +86,7 @@ class _TestLabPageState extends State<TestLabPage> {
             ),
 
           // ------------------------------------------------
-          // LAYER 3: Top Controls (Switch Camera)
+          // LAYER 3: Top Controls
           // ------------------------------------------------
           Positioned(
             top: 50,
@@ -116,21 +95,19 @@ class _TestLabPageState extends State<TestLabPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Switch Camera Button
                 _buildGlassButton(
                   icon: Icons.flip_camera_ios,
                   onTap: () async {
-                    // Show loading spinner
-                    setState(() => _isLoading = true);
+                    setState(() {
+                      _isLoading = true;
+                      _detectedFaces = [];
+                    });
 
-                    // Trigger the switch in the package
                     await _controller.switchCamera();
 
-                    // Hide loading spinner
-                    setState(() => _isLoading = false);
+                    if (mounted) setState(() => _isLoading = false);
                   },
                 ),
-                // Toggle Panel Button
                 _buildGlassButton(
                   icon: _isPanelVisible ? Icons.close : Icons.tune,
                   onTap: () {
@@ -144,7 +121,7 @@ class _TestLabPageState extends State<TestLabPage> {
           ),
 
           // ------------------------------------------------
-          // LAYER 4: The "Test Lab" Control Panel
+          // LAYER 4: Control Panel
           // ------------------------------------------------
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
@@ -156,7 +133,7 @@ class _TestLabPageState extends State<TestLabPage> {
           ),
 
           // ------------------------------------------------
-          // LAYER 5: Global Loading Indicator
+          // LAYER 5: Global Loading
           // ------------------------------------------------
           if (_isLoading)
             Container(
@@ -170,7 +147,7 @@ class _TestLabPageState extends State<TestLabPage> {
     );
   }
 
-  // --- UI Construction Helpers ---
+  // --- UI Helpers ---
 
   Widget _buildGlassButton({
     required IconData icon,
@@ -184,13 +161,6 @@ class _TestLabPageState extends State<TestLabPage> {
           color: Colors.black45,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
         ),
         child: Icon(icon, color: Colors.white, size: 26),
       ),
@@ -204,41 +174,19 @@ class _TestLabPageState extends State<TestLabPage> {
         color: const Color(0xFF1A1A1A).withOpacity(0.95),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black54,
-            blurRadius: 20,
-            offset: Offset(0, -5),
-          ),
-        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                "🧪 Feature Test Lab",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => setState(() => _isPanelVisible = false),
-                child: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.white54,
-                ),
-              ),
-            ],
+          const Text(
+            "🧪 Feature Test Lab",
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
           ),
           const SizedBox(height: 20),
-
-          // Toggles Row
           Row(
             children: [
               _buildSwitch(
@@ -251,22 +199,17 @@ class _TestLabPageState extends State<TestLabPage> {
                 _showCaptureButton,
                 (v) => setState(() => _showCaptureButton = v),
               ),
-              _buildSwitch("Devil Mode 😈", _showCustomOverlay, (v) {
-                setState(() {
+              _buildSwitch(
+                "Devil Mode 😈",
+                _showCustomOverlay,
+                (v) => setState(() {
                   _showCustomOverlay = v;
-                  // Auto-hide the default frame if Custom UI is on for better visibility
-                  if (v) {
-                    _showFrame = false;
-                  } else {
-                    _showFrame = true;
-                  }
-                });
-              }),
+                  _showFrame = !v;
+                }),
+              ),
             ],
           ),
-          const Divider(color: Colors.white12, height: 30),
-
-          // Frame Styles
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -279,8 +222,6 @@ class _TestLabPageState extends State<TestLabPage> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Colors
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -314,7 +255,6 @@ class _TestLabPageState extends State<TestLabPage> {
           Text(
             label,
             style: const TextStyle(color: Colors.white70, fontSize: 11),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -322,11 +262,10 @@ class _TestLabPageState extends State<TestLabPage> {
   }
 
   Widget _buildStyleIcon(FaceFrameStyle style, IconData icon) {
-    final isSelected = _frameStyle == style;
     return IconButton(
       icon: Icon(
         icon,
-        color: isSelected ? _activeColor : Colors.grey,
+        color: _frameStyle == style ? _activeColor : Colors.grey,
         size: 28,
       ),
       onPressed: () => setState(() => _frameStyle = style),
@@ -334,55 +273,46 @@ class _TestLabPageState extends State<TestLabPage> {
   }
 
   Widget _buildColorCircle(Color color) {
-    final isSelected = _activeColor == color;
     return GestureDetector(
       onTap: () => setState(() => _activeColor = color),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: isSelected ? 34 : 26,
-        height: isSelected ? 34 : 26,
+      child: Container(
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
-          boxShadow:
-              isSelected
-                  ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 10)]
+          border:
+              _activeColor == color
+                  ? Border.all(color: Colors.white, width: 3)
                   : null,
         ),
       ),
     );
   }
 
-  // --- Capture Result Popup ---
   void _showResultDialog(FaceCaptureResult result) async {
     final file = File(result.image.path);
     final bytes = await file.readAsBytes();
     final ui.Image decodedImage = await decodeImageFromList(bytes);
-
     if (!mounted) return;
-
     showDialog(
       context: context,
       builder:
-          (context) => Dialog(
+          (_) => Dialog(
             backgroundColor: Colors.transparent,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Display the Image
                 Container(
                   constraints: const BoxConstraints(maxHeight: 500),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: Colors.black,
                     border: Border.all(color: Colors.white24),
                   ),
                   clipBehavior: Clip.hardEdge,
                   child: AspectRatio(
                     aspectRatio: decodedImage.width / decodedImage.height,
                     child: CustomPaint(
-                      // We use the ResultPainter to draw the photo AND the privacy blur
                       painter: ResultPainter(
                         image: decodedImage,
                         faceRect: result.faceRect,
@@ -390,26 +320,10 @@ class _TestLabPageState extends State<TestLabPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Close Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      "Close Preview",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Close"),
                 ),
               ],
             ),
@@ -418,60 +332,40 @@ class _TestLabPageState extends State<TestLabPage> {
   }
 }
 
-// -----------------------------------------------------------------------------
-// PAINTER 1: Result Painter (Draws Captured Photo + Privacy Blur)
-// -----------------------------------------------------------------------------
 class ResultPainter extends CustomPainter {
   final ui.Image image;
   final Rect? faceRect;
-
   ResultPainter({required this.image, required this.faceRect});
-
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Draw the full high-res image fitted to the dialog
-    final src = Rect.fromLTWH(
-      0,
-      0,
-      image.width.toDouble(),
-      image.height.toDouble(),
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint(),
     );
-    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
-    canvas.drawImageRect(image, src, dst, Paint());
-
-    // 2. If a face was found, apply effects
     if (faceRect != null) {
-      // Calculate Scale Factor (Full Image -> Dialog Size)
-      final double scaleX = size.width / image.width;
-      final double scaleY = size.height / image.height;
-
-      // Scale the face coordinates
-      final Rect scaledRect = Rect.fromLTRB(
+      final scaleX = size.width / image.width;
+      final scaleY = size.height / image.height;
+      final rect = Rect.fromLTRB(
         faceRect!.left * scaleX,
         faceRect!.top * scaleY,
         faceRect!.right * scaleX,
         faceRect!.bottom * scaleY,
       );
-
-      // A. Draw Privacy Blur
-      final Paint blurPaint =
-          Paint()
-            ..color = Colors.black.withOpacity(0.5)
-            ..maskFilter = const MaskFilter.blur(
-              BlurStyle.normal,
-              20,
-            ); // Stronger blur
-      canvas.drawRect(scaledRect, blurPaint);
-
-      // B. Draw Tech Border (Visual confirmation)
-      final Paint borderPaint =
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..color = Colors.greenAccent
-            ..strokeWidth = 3;
-
-      // Draw corners only (simplified for tech look) or full rect
-      canvas.drawRect(scaledRect, borderPaint);
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = Colors.black54
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+      );
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = Colors.greenAccent
+          ..strokeWidth = 3,
+      );
     }
   }
 
@@ -479,44 +373,27 @@ class ResultPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// -----------------------------------------------------------------------------
-// PAINTER 2: Emoji Face Painter (The "Devil" Overlay)
-// -----------------------------------------------------------------------------
 class EmojiFacePainter extends CustomPainter {
   final List<Rect> faces;
-
   EmojiFacePainter({required this.faces});
-
   @override
   void paint(Canvas canvas, Size size) {
     for (final face in faces) {
-      // 1. Define the Emoji
-      const icon = "😈"; // The Devil Emoji
-
-      // 2. Prepare Text Painter
-      // Scale font size based on the width of the detected face for a perfect fit
-      final textStyle = TextStyle(
-        fontSize: face.width * 1.2, // Make it slightly larger than the face box
-      );
-
-      final textSpan = TextSpan(text: icon, style: textStyle);
       final textPainter = TextPainter(
-        text: textSpan,
+        text: TextSpan(
+          text: "😈",
+          style: TextStyle(fontSize: face.width * 1.2),
+        ),
         textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
       );
-
       textPainter.layout();
-
-      // 3. Calculate Center Position
-      // Center the emoji on the face rect
-      final offset = Offset(
-        face.center.dx - (textPainter.width / 2),
-        face.center.dy - (textPainter.height / 2),
+      textPainter.paint(
+        canvas,
+        Offset(
+          face.center.dx - textPainter.width / 2,
+          face.center.dy - textPainter.height / 2,
+        ),
       );
-
-      // 4. Draw the Emoji
-      textPainter.paint(canvas, offset);
     }
   }
 
