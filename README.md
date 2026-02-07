@@ -20,12 +20,16 @@ I developed **live_face_tracker** to provide a "plug-and-play" solution. Whether
 
 ---
 
-## 🎬 Previews
+## 🎬 Preview
 
-| **Dynamic Styling** | **Headless Mode (Custom UI)** |
-| :---: | :---: |
-| ![Style Demo](live_face_tracker/assets/gifs/face_tracking.gif) | ![Custom UI Demo](live_face_tracker/assets/gifs/face_tracking.gif) |
-| *Seamlessly switch between frame styles and colors.* | *Disable the default frame to build custom AR overlays.* |
+<div align="center">
+  <img src="assets/gifs/face_tracking.gif" width="300"/>
+  
+  <p>
+    <i>Experience buttery smooth, real-time tracking. <br>
+    Use the built-in customizable frames or go <b>Headless</b> to build your own custom AR overlays.</i>
+  </p>
+</div>
 
 ---
 
