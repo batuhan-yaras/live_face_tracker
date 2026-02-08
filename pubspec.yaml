@@ -1,6 +1,6 @@
 name: live_face_tracker
 description: A high-performance, real-time face detection and tracking package. Features isolate-based computing, adaptive smoothing, headless mode for custom UIs, and smart camera handling.
-version: 0.0.1
+version: 0.0.2
 homepage: https://github.com/batuhan-yaras/live_face_tracker
 repository: https://github.com/batuhan-yaras/live_face_tracker
 issue_tracker: https://github.com/batuhan-yaras/live_face_tracker/issues

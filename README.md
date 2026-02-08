@@ -14,7 +14,7 @@ It leverages Google's ML Kit to detect faces and provides a smooth, jitter-free 
 
 While developing my latest application, I realized that although Google's ML Kit is powerful for face detection, building a production-ready camera implementation around it is difficult.
 
-Drawing a smooth tracking frame, handling aspect ratios, synchronizing screen coordinates with image coordinates, and managing front-camera mirroring requires significant engineering effort. 
+Drawing a smooth tracking frame, handling aspect ratios, synchronizing screen coordinates with image coordinates, and managing front-camera mirroring requires significant engineering effort.
 
 I developed **live_face_tracker** to provide a "plug-and-play" solution. Whether you need a simple face tracking overlay or raw face data to build Snapchat-like filters, this package handles the heavy lifting.
 
@@ -23,7 +23,7 @@ I developed **live_face_tracker** to provide a "plug-and-play" solution. Whether
 ## 🎬 Preview
 
 <div align="center">
-  <img src="assets/gifs/face_tracking.gif" width="300"/>
+  <img src="https://github.com/batuhan-yaras/live_face_tracker/blob/main/assets/gifs/face_tracking.gif?raw=true" width="300"/>
   
   <p>
     <i>Experience buttery smooth, real-time tracking. <br>
@@ -42,18 +42,20 @@ I developed **live_face_tracker** to provide a "plug-and-play" solution. Whether
 * 🛡️ **Anti-Flicker System:** Keeps the UI stable even if the detector misses a frame.
 * 🔄 **Camera Switch:** Full support for toggling between Front and Back cameras.
 
+> **⚠️ Note:** This package currently supports **Photo Capture only**. Video recording capabilities are planned for future versions.
+
 ---
-<!-- 
+
 ## 📦 Installation
 
 Add the dependency to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  live_face_tracker: ^latest_version
+  live_face_tracker: ^0.0.2
 ```
 
---- -->
+---
 
 ## 🚀 Usage
 
