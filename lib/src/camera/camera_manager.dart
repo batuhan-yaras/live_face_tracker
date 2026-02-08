@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 /// Manages the camera lifecycle, including initialization, streaming, and switching.
 class CameraManager {
@@ -42,10 +40,9 @@ class CameraManager {
       camera,
       ResolutionPreset.high,
       enableAudio: false,
-      imageFormatGroup:
-          Platform.isAndroid
-              ? ImageFormatGroup.nv21
-              : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
 
     try {
@@ -100,10 +97,9 @@ class CameraManager {
       newCamera,
       ResolutionPreset.high,
       enableAudio: false,
-      imageFormatGroup:
-          Platform.isAndroid
-              ? ImageFormatGroup.nv21
-              : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
 
     try {

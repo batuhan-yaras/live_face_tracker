@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-import 'dart:ui' as ui; // Needed for Rect/Size in compute
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart'; // For compute
 import 'package:flutter/material.dart';
@@ -133,7 +131,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
       );
       final newRotation =
           InputImageRotationValue.fromRawValue(sensorOrientation) ??
-          InputImageRotation.rotation270deg;
+              InputImageRotation.rotation270deg;
 
       if (detectedFaces.isEmpty) {
         _smoothFaceRect = null;
@@ -329,11 +327,8 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                       rotation: _rotation,
                       activeColor: widget.activeColor,
                       style: widget.frameStyle,
-                      isFrontCamera:
-                          _cameraManager
-                              .controller
-                              ?.description
-                              .lensDirection ==
+                      isFrontCamera: _cameraManager
+                              .controller?.description.lensDirection ==
                           CameraLensDirection.front,
                     ),
                     size: Size(constraints.maxWidth, constraints.maxHeight),
@@ -354,7 +349,7 @@ class _FaceTrackerViewState extends State<FaceTrackerView> {
                       width: 70,
                       height: 70,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 4),
                       ),
@@ -398,8 +393,7 @@ class _MappingData {
 /// Standalone function to run in a background Isolate.
 /// Maps camera coordinates to screen coordinates.
 Rect _mapFacesInIsolate(_MappingData data) {
-  final bool isRotated =
-      data.rotation == InputImageRotation.rotation90deg ||
+  final bool isRotated = data.rotation == InputImageRotation.rotation90deg ||
       data.rotation == InputImageRotation.rotation270deg;
 
   final double imageWidth =

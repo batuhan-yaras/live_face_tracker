@@ -36,15 +36,13 @@ class FacePainter extends CustomPainter {
       return;
     }
 
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0
-          ..color = activeColor;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..color = activeColor;
 
     // Calculate scaling logic (Same as Isolate logic but for canvas drawing)
-    final bool isRotated =
-        rotation == InputImageRotation.rotation90deg ||
+    final bool isRotated = rotation == InputImageRotation.rotation90deg ||
         rotation == InputImageRotation.rotation270deg;
 
     final double imageWidth =
@@ -84,7 +82,6 @@ class FacePainter extends CustomPainter {
         _drawDottedLine(canvas, mappedRect, paint);
         break;
       case FaceFrameStyle.cornerBracket:
-      default:
         _drawCornerBrackets(canvas, mappedRect, paint);
         break;
     }
@@ -130,8 +127,8 @@ class FacePainter extends CustomPainter {
   }
 
   void _drawDottedLine(Canvas canvas, Rect rect, Paint paint) {
-    final Path path =
-        Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(8)));
+    final Path path = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)));
     final Path dashPath = Path();
     const double dashWidth = 10.0;
     const double dashSpace = 5.0;

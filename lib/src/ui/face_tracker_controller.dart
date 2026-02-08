@@ -1,6 +1,9 @@
+// ignore_for_file: unused_field
+
 import 'dart:io';
 import 'dart:ui';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'face_capture_result.dart';
@@ -79,7 +82,7 @@ class FaceTrackerController {
         finalFaceRect = faces.first.boundingBox;
       }
     } catch (e) {
-      print("Error during capture processing: $e");
+      debugPrint("Error during capture processing: $e");
     } finally {
       tempDetector?.close();
     }

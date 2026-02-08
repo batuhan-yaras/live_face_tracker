@@ -1,5 +1,4 @@
 import 'dart:io'; // For platform checks
-import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -116,8 +115,7 @@ class FaceDetectorService {
 
     final InputImageMetadata metadata = InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation:
-          InputImageRotationValue.fromRawValue(rotationCompensation) ??
+      rotation: InputImageRotationValue.fromRawValue(rotationCompensation) ??
           InputImageRotation.rotation0deg,
       format: inputImageFormat,
       bytesPerRow: image.planes[0].bytesPerRow,
