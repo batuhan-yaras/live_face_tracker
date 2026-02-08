@@ -1,20 +1,32 @@
 name: live_face_tracker
-description: "A new Flutter package project."
+description: A high-performance, real-time face detection and tracking package. Features isolate-based computing, adaptive smoothing, headless mode for custom UIs, and smart camera handling.
 version: 0.0.1
-homepage:
+homepage: https://github.com/batuhan-yaras/live_face_tracker
+repository: https://github.com/batuhan-yaras/live_face_tracker
+issue_tracker: https://github.com/batuhan-yaras/live_face_tracker/issues
 
 environment:
-  sdk: '>=3.7.0 <4.0.0'
-  flutter: ">=1.17.0"
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: ">=3.16.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  camera: ^0.11.2+1
-  google_mlkit_face_detection: ^0.13.1
-  image: ^4.7.2
+  # Camera access
+  camera: ^0.11.0
+  # ML Kit for Face Detection (Stabil Sürüm)
+  google_mlkit_face_detection: ^0.13.0
+  # Image manipulation (cropping, mirroring logic)
+  image: ^4.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0
+
+topics:
+  - face-detection
+  - camera
+  - ml-kit
+  - ar
+  - face-tracking

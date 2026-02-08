@@ -1,3 +1,6 @@
 ## 0.0.1
 
-* TODO: Describe initial release.
+* Initial release.
+* High-performance face tracking with Isolate computing.
+* Smart smoothing algorithm added.
+* Custom UI (Headless mode) support.
